@@ -1,0 +1,28 @@
+1) Install Python version
+   Required: Python 3.12.10
+   Check:
+   python --version
+
+2) Create virtual environment
+   python -m venv .venv
+
+3) Activate environment (Windows)
+   .venv\Scripts\activate
+
+4) Install exact locked dependencies
+   pip install -r requirements.lock.txt
+
+5a) Start with GUI launcher (recommended)
+    python invoice_tool_launcher.py
+
+5b) Or start API only (headless)
+    python paddle_invoice_api.py --host 127.0.0.1 --port 8866
+
+6) Open frontend (if using headless mode)
+   Open invoice-tool.html in browser
+
+Notes
+- If Python version differs, results/performance may differ.
+- If requirements.lock.txt install fails, fallback to:
+  pip install -r requirements.txt
+- GUI launcher auto-opens browser and shows status window.
