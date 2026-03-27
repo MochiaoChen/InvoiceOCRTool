@@ -49,8 +49,10 @@ def contains_non_ascii(path: Path) -> bool:
 
 
 def get_safe_app_root() -> Path:
-    public_root = Path(os.environ.get('PUBLIC', r'C:\Users\Public'))
-    return public_root / 'Documents' / 'InvoiceOCRTool' / 'app'
+    if sys.platform == 'win32':
+        public_root = Path(os.environ.get('PUBLIC', r'C:\Users\Public'))
+        return public_root / 'Documents' / 'InvoiceOCRTool' / 'app'
+    return Path.home() / '.local' / 'share' / 'InvoiceOCRTool' / 'app'
 
 
 def sync_tree(src: Path, dst: Path) -> None:
