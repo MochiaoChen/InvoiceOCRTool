@@ -1,0 +1,2323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发票信息提取工具</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg: #0f0f13;
+  --surface: #16161d;
+  --surface2: #1e1e28;
+  --surface3: #242430;
+  --border: #2a2a38;
+  --border2: #363648;
+  --accent: #7c6af7;
+  --accent2: #f7816a;
+  --accent3: #6af7c8;
+  --text: #e8e8f0;
+  --text2: #8888aa;
+  --text3: #5a5a78;
+  --success: #4ade80;
+  --error: #f87171;
+  --warning: #fbbf24;
+  --edited: #f0a855;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(124,106,247,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,106,247,0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none; z-index: 0;
+}
+
+.page {
+  position: relative; z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.logo { display: flex; align-items: center; gap: 14px; }
+.logo-icon {
+  width: 42px; height: 42px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 11px; display: flex; align-items: center; justify-content: center;
+  font-size: 19px; box-shadow: 0 0 24px rgba(124,106,247,0.45);
+}
+.logo-text h1 { font-size: 17px; font-weight: 700; }
+.logo-text p { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+.badge {
+  background: rgba(106,247,200,0.1); border: 1px solid rgba(106,247,200,0.3);
+  color: var(--accent3); font-size: 11px; font-family: 'JetBrains Mono', monospace;
+  padding: 4px 12px; border-radius: 20px;
+}
+
+/* ── Stats ── */
+.stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; transition: border-color 0.2s; cursor: default;
+}
+.stat-card:hover { border-color: var(--accent); }
+.stat-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600; margin-bottom: 3px; }
+.stat-label { font-size: 11px; color: var(--text2); }
+.stat-card:nth-child(1) .stat-value { color: var(--accent); }
+.stat-card:nth-child(2) .stat-value { color: var(--accent3); }
+.stat-card:nth-child(3) .stat-value { color: var(--accent2); }
+.stat-card:nth-child(4) .stat-value { color: var(--warning); }
+
+/* ── Layout ── */
+.layout { display: grid; grid-template-columns: 310px 1fr; gap: 18px; align-items: start; }
+
+/* ── Card ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; position: relative; overflow: hidden;
+}
+.card + .card { margin-top: 14px; }
+.card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.45;
+}
+.card-title {
+  font-size: 10.5px; font-family: 'JetBrains Mono', monospace; color: var(--text2);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 7px var(--accent); flex-shrink: 0;
+}
+
+
+/* ── Upload tabs ── */
+.upload-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.upload-tab {
+  flex: 1; padding: 6px 4px; border-radius: 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text2); font-size: 10.5px; cursor: pointer;
+  font-family: 'Noto Sans SC', sans-serif; transition: all 0.18s; text-align: center;
+  line-height: 1.4;
+}
+.upload-tab.active {
+  border-color: var(--accent); background: rgba(124,106,247,0.1); color: var(--accent);
+}
+.upload-tab .tab-icon { display: block; font-size: 14px; margin-bottom: 2px; }
+.upload-tab .tab-label { display: block; font-weight: 500; }
+.upload-tab .tab-sub { display: block; font-size: 9.5px; color: var(--text3); margin-top: 1px; }
+.upload-tab.active .tab-sub { color: rgba(124,106,247,0.7); }
+.upload-pane { display: none; }
+.upload-pane.active { display: block; }
+
+/* ── Image drop zone (amber tint) ── */
+.drop-zone-img {
+  border: 2px dashed rgba(251,191,36,0.4); border-radius: 10px; padding: 22px 16px;
+  text-align: center; cursor: pointer; transition: all 0.25s;
+  background: rgba(251,191,36,0.04); position: relative;
+}
+.drop-zone-img:hover, .drop-zone-img.drag-over {
+  border-color: var(--warning); background: rgba(251,191,36,0.09);
+}
+.drop-zone-img input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.drop-zone-img h3 { font-size: 12px; font-weight: 500; margin-bottom: 3px; }
+.drop-zone-img p  { font-size: 10.5px; color: var(--text2); }
+
+/* ── Photo warn banner ── */
+.photo-warn {
+  display: none; margin-top: 10px; padding: 8px 11px; border-radius: 8px;
+  background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.35);
+  color: var(--warning); font-size: 11px; line-height: 1.55;
+  animation: fadeUp 0.3s ease;
+}
+.photo-warn.show { display: flex; gap: 8px; align-items: flex-start; }
+.photo-warn-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+/* ── Drop zone ── */
+.drop-zone {
+  border: 2px dashed var(--border2); border-radius: 10px; padding: 28px 16px;
+  text-align: center; cursor: pointer; transition: all 0.25s;
+  background: var(--surface2); position: relative;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent); background: rgba(124,106,247,0.07);
+}
+.drop-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.drop-icon { font-size: 28px; display: block; margin-bottom: 9px; filter: drop-shadow(0 0 10px rgba(124,106,247,0.5)); }
+.drop-zone h3 { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.drop-zone p { font-size: 11px; color: var(--text2); }
+
+/* ── File list ── */
+.file-list { max-height: 170px; overflow-y: auto; margin-top: 12px; }
+.file-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 7px; background: var(--surface2); margin-bottom: 4px;
+  border: 1px solid transparent; transition: all 0.2s; animation: fadeUp 0.22s ease;
+}
+@keyframes fadeUp { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:none; } }
+.file-item.processing { border-color: rgba(124,106,247,0.4); }
+.file-item.done { border-color: rgba(74,222,128,0.22); }
+.file-item.error { border-color: rgba(248,113,113,0.3); }
+.file-dot {
+  width: 17px; height: 17px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
+}
+.file-dot.pending { background: rgba(136,136,170,0.12); color: var(--text3); }
+.file-dot.processing { background: rgba(124,106,247,0.18); color: var(--accent); animation: spin 1s linear infinite; }
+.file-dot.done { background: rgba(74,222,128,0.12); color: var(--success); }
+.file-dot.error { background: rgba(248,113,113,0.12); color: var(--error); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.file-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.file-remove { background:none; border:none; color:var(--text3); cursor:pointer; font-size:12px; padding:2px 4px; transition:color 0.15s; }
+.file-remove:hover { color: var(--error); }
+
+/* ── Settings ── */
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label { font-size: 13px; }
+.setting-desc { font-size: 10.5px; color: var(--text2); margin-top: 1px; }
+.toggle { position: relative; width: 38px; height: 20px; flex-shrink: 0; }
+.toggle input { display: none; }
+.toggle-track { position: absolute; inset: 0; background: var(--border); border-radius: 10px; cursor: pointer; transition: background 0.25s; }
+.toggle input:checked ~ .toggle-track { background: var(--accent); }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: transform 0.25s; pointer-events: none; }
+.toggle input:checked ~ .toggle-track .toggle-thumb { transform: translateX(18px); }
+
+.rename-rule { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+/* segment list */
+.rename-segments { display: flex; flex-direction: column; gap: 4px; }
+.rename-seg-row {
+  display: flex; align-items: center; gap: 5px;
+}
+.rename-seg-sep {
+  font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0; width: 14px; text-align: center;
+}
+.rename-seg-input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; color: var(--text);
+  font-size: 11px; font-family: 'JetBrains Mono', monospace; outline: none;
+  transition: border-color 0.15s; min-width: 0;
+}
+.rename-seg-input:focus { border-color: var(--accent); }
+.rename-seg-input::placeholder { color: var(--text3); }
+.rename-seg-del {
+  background: none; border: none; color: var(--text3); cursor: pointer;
+  font-size: 13px; padding: 0 2px; flex-shrink: 0; border-radius: 3px;
+  transition: all 0.15s; line-height: 1;
+}
+.rename-seg-del:hover { color: var(--error); background: rgba(248,113,113,0.1); }
+
+/* bottom controls */
+.rename-bottom { display: flex; gap: 5px; align-items: center; }
+.rename-add-btn {
+  padding: 5px 10px; border-radius: 6px; background: var(--surface3);
+  border: 1px solid var(--border2); color: var(--text2); font-size: 11px;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.rename-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.rename-sep-label { font-size: 10.5px; color: var(--text3); flex-shrink: 0; }
+.rename-sep-select {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text2); font-size: 11px; padding: 4px 6px; outline: none;
+  font-family: 'JetBrains Mono', monospace; cursor: pointer; width: 52px;
+}
+.rename-sep-select:focus { border-color: var(--accent); }
+.rename-sep-custom {
+  width: 48px; background: var(--surface2); border: 1px solid var(--accent);
+  border-radius: 6px; color: var(--text); font-size: 11px; padding: 4px 6px;
+  outline: none; font-family: 'JetBrains Mono', monospace; text-align: center;
+}
+.rename-sep-custom:focus { border-color: var(--accent3); }
+.rename-preview {
+  font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace;
+  padding: 4px 7px; background: var(--surface2); border-radius: 5px;
+  word-break: break-all; line-height: 1.6;
+  border: 1px solid var(--border);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  width: 100%; padding: 12px; margin-top: 15px;
+  background: linear-gradient(135deg, var(--accent), #9d6af7);
+  border: none; border-radius: 10px; color: white;
+  font-family: 'Noto Sans SC', sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.25s; letter-spacing: 0.04em;
+  box-shadow: 0 4px 16px rgba(124,106,247,0.28);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(124,106,247,0.4); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-sm {
+  padding: 5px 11px; border-radius: 7px; font-size: 11.5px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text2);
+  font-family: 'Noto Sans SC', sans-serif; transition: all 0.18s; white-space: nowrap;
+}
+.btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm.edit { border-color: rgba(124,106,247,0.35); color: var(--accent); background: rgba(124,106,247,0.07); }
+.btn-sm.edit:hover { background: rgba(124,106,247,0.16); }
+
+/* ── Progress ── */
+.progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+.progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent3));
+  transition: width 0.35s ease; position: relative;
+}
+.progress-fill::after {
+  content: ''; position: absolute; top:0; right:0; width:40px; height:100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45));
+  animation: shim 1.2s infinite;
+}
+@keyframes shim { 0%,100%{opacity:0} 50%{opacity:1} }
+.progress-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text2); margin-top: 5px; text-align: right; }
+
+/* ── Log ── */
+.log-area {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  max-height: 130px; overflow-y: auto; line-height: 1.85; margin-top: 12px;
+}
+.log-line { display: flex; gap: 8px; }
+.log-time { color: var(--text3); flex-shrink: 0; }
+.log-msg.info { color: var(--text); }
+.log-msg.success { color: var(--success); }
+.log-msg.warn { color: var(--warning); }
+.log-msg.error { color: var(--error); }
+
+/* ── Results panel ── */
+.results-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+}
+.results-panel::before {
+  content: ''; display: block; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent3), transparent); opacity: 0.5;
+}
+.results-header {
+  padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px;
+}
+.results-title {
+  font-size: 10.5px; font-family: 'JetBrains Mono', monospace; color: var(--text2);
+  letter-spacing: 0.1em; text-transform: uppercase; display: flex; align-items: center; gap: 8px;
+}
+.results-title::before { content: ''; width:5px; height:5px; border-radius:50%; background:var(--accent3); box-shadow:0 0 7px var(--accent3); flex-shrink:0; }
+.results-actions { display: flex; gap: 8px; align-items: center; }
+.count-badge {
+  background: rgba(106,247,200,0.08); border: 1px solid rgba(106,247,200,0.2);
+  color: var(--accent3); font-size: 10.5px; font-family: 'JetBrains Mono', monospace;
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; max-height: calc(100vh - 320px); overflow-y: auto; min-height: 280px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead tr { background: var(--surface2); position: sticky; top: 0; z-index: 2; }
+th {
+  padding: 10px 12px; text-align: left;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.07em;
+  color: var(--text2); text-transform: uppercase; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 9px 12px; border-bottom: 1px solid rgba(42,42,56,0.5);
+  color: var(--text); white-space: nowrap; vertical-align: middle;
+}
+tr:hover td { background: rgba(124,106,247,0.03); }
+tr.is-dup td { opacity: 0.55; }
+tr.is-dup:hover td { opacity: 0.85; }
+
+.td-mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.td-amount { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent3); }
+.td-tax-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent2); }
+.td-sub { font-family: 'JetBrains Mono', monospace; color: var(--text2); }
+.td-long { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+td.cell-editable { cursor: text; }
+td.cell-editable:hover { background: rgba(124,106,247,0.1); }
+.inline-editor {
+  width: 100%;
+  min-width: 90px;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 5px 7px;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124,106,247,0.16);
+}
+.inline-editor[type="number"] { font-family: 'JetBrains Mono', monospace; }
+
+.tag {
+  display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; white-space: nowrap;
+}
+.tag-type { background: rgba(124,106,247,0.1); color: var(--accent); border: 1px solid rgba(124,106,247,0.22); }
+.tag-ok { background: rgba(74,222,128,0.07); color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
+.tag-dup { background: rgba(251,191,36,0.08); color: var(--warning); border: 1px solid rgba(251,191,36,0.22); }
+.tag-fail { background: rgba(248,113,113,0.07); color: var(--error); border: 1px solid rgba(248,113,113,0.18); }
+.tag-edited { background: rgba(240,168,85,0.09); color: var(--edited); border: 1px solid rgba(240,168,85,0.22); }
+
+.field-missing { color: var(--text3); font-style: italic; font-size: 11px; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 70px 20px; color: var(--text2); }
+.empty-icon { font-size: 36px; display: block; margin-bottom: 10px; opacity: 0.3; }
+.empty-state p { font-size: 13px; }
+
+/* ── Edit Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 16px;
+  width: 580px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 28px 70px rgba(0,0,0,0.65);
+  transform: scale(0.94) translateY(14px); transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+.modal-overlay.open .modal { transform: scale(1) translateY(0); }
+.modal-top-bar {
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent3), var(--accent2));
+  border-radius: 16px 16px 0 0;
+}
+.modal-header {
+  padding: 18px 22px 0; display: flex; align-items: flex-start; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 700; }
+.modal-sub { font-size: 10.5px; color: var(--text2); margin-top: 3px; font-family: 'JetBrains Mono', monospace; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-close {
+  background: none; border: none; color: var(--text2); cursor: pointer; font-size: 20px;
+  width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0; margin-top: -2px;
+}
+.modal-close:hover { background: var(--surface2); color: var(--text); }
+
+.modal-body { padding: 18px 22px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-label {
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text2); letter-spacing: 0.07em; text-transform: uppercase;
+}
+.form-input, .form-select {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 12px; color: var(--text); font-family: 'Noto Sans SC', sans-serif; font-size: 13px;
+  outline: none; transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
+}
+.form-input:focus, .form-select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(124,106,247,0.14);
+}
+.form-select { cursor: pointer; }
+.form-select option { background: var(--surface2); }
+
+/* Auto-calc hint */
+.form-hint { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+.raw-preview {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 12px; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--text2); max-height: 90px; overflow-y: auto; line-height: 1.7;
+  white-space: pre-wrap; word-break: break-all;
+}
+
+.modal-footer {
+  padding: 14px 22px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+}
+.modal-hint { font-size: 10.5px; color: var(--text3); flex: 1; }
+.btn-cancel {
+  padding: 8px 18px; border-radius: 8px; background: transparent; border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer; font-family: 'Noto Sans SC', sans-serif; font-size: 13px;
+  transition: all 0.18s;
+}
+.btn-cancel:hover { border-color: var(--border2); color: var(--text); }
+.btn-save {
+  padding: 8px 22px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #9d6af7);
+  border: none; color: white; cursor: pointer;
+  font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 600;
+  transition: all 0.2s; box-shadow: 0 3px 12px rgba(124,106,247,0.28);
+}
+.btn-save:hover { box-shadow: 0 5px 18px rgba(124,106,247,0.42); transform: translateY(-1px); }
+
+/* ── Column manager bar (sits above table, inside results panel) ── */
+.col-manager-bar {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.col-manager-header {
+  padding: 8px 16px; display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; user-select: none;
+}
+.col-manager-title {
+  font-size: 10.5px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text2); letter-spacing: 0.08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+}
+.col-manager-title::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent2); box-shadow: 0 0 6px var(--accent2);
+}
+.col-manager-hint { font-size: 10px; color: var(--text3); }
+.col-manager-body { display: none; border-top: 1px solid var(--border); }
+.col-manager-body.open { display: block; }
+
+/* col list */
+.col-list {
+  padding: 5px 8px; display: flex; flex-direction: column; gap: 2px;
+  max-height: 280px; overflow-y: auto;
+}
+
+.col-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 7px; border: 1px solid transparent;
+  background: transparent; cursor: default; user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+.col-row:hover { border-color: var(--border2); }
+.col-row.dragging { opacity: 0.35; border-style: dashed; }
+.col-row.drag-over { border-color: var(--accent); background: rgba(124,106,247,0.1); }
+.col-row.col-hidden { opacity: 0.45; }
+.col-row.col-hidden .col-label { text-decoration: line-through; }
+
+.col-handle {
+  color: var(--text3); font-size: 12px; cursor: grab; flex-shrink: 0;
+  padding: 0 1px; transition: color 0.15s; line-height: 1;
+}
+.col-handle:active { cursor: grabbing; }
+.col-handle:hover { color: var(--text2); }
+
+.col-vis {
+  width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border2);
+  background: transparent; flex-shrink: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; transition: all 0.15s;
+}
+.col-vis.on { background: var(--accent); border-color: var(--accent); color: white; }
+.col-vis.on::after { content: '✓'; }
+
+.col-label { font-size: 11.5px; color: var(--text); line-height: 1; }
+
+.col-type-badge {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace; padding: 1px 5px;
+  border-radius: 3px; flex-shrink: 0;
+}
+.col-type-badge.fixed  { background: rgba(136,136,170,0.1); color: var(--text3); }
+.col-type-badge.custom { background: rgba(124,106,247,0.12); color: var(--accent); }
+
+.col-del {
+  background: none; border: none; color: var(--text3); cursor: pointer;
+  font-size: 12px; padding: 0 2px; flex-shrink: 0; border-radius: 3px;
+  transition: all 0.15s; line-height: 1;
+}
+.col-del:hover { color: var(--error); background: rgba(248,113,113,0.1); }
+
+.col-add-row {
+  padding: 6px 10px; border-top: 1px solid var(--border);
+}
+.col-add-btn {
+  padding: 4px 12px; border-radius: 6px; border: 1px dashed var(--border2);
+  background: transparent; color: var(--text2); font-size: 11px; cursor: pointer;
+  font-family: 'Noto Sans SC', sans-serif; transition: all 0.18s;
+}
+.col-add-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(124,106,247,0.06); }
+
+.col-add-form {
+  padding: 6px 10px 8px; border-top: 1px solid var(--border); display: none;
+  flex-direction: column; gap: 5px;
+}
+.col-add-form.open { display: flex; }
+.col-add-inputs { display: flex; gap: 6px; }
+.col-add-input {
+  flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 9px; color: var(--text); font-size: 11px; outline: none;
+  font-family: 'Noto Sans SC', sans-serif; transition: border-color 0.15s; min-width: 0;
+}
+.col-add-input:focus { border-color: var(--accent); }
+.col-add-input::placeholder { color: var(--text3); }
+.col-add-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.col-add-confirm {
+  padding: 4px 14px; border-radius: 5px; background: var(--accent); border: none;
+  color: white; font-size: 11px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif;
+}
+.col-add-confirm:hover { opacity: 0.85; }
+.col-add-cancel {
+  padding: 4px 11px; border-radius: 5px; background: transparent;
+  border: 1px solid var(--border); color: var(--text2); font-size: 11px;
+  cursor: pointer; font-family: 'Noto Sans SC', sans-serif;
+}
+
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">🧾</div>
+      <div class="logo-text">
+        <h1>发票信息提取工具</h1>
+        <p>LOCAL · OFFLINE · PRIVATE</p>
+      </div>
+    </div>
+    <span class="badge">● 本地运行</span>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value" id="stat-total">0</div>
+      <div class="stat-label">已识别发票</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-amount">¥0.00</div>
+      <div class="stat-label">价税合计</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-tax">¥0.00</div>
+      <div class="stat-label">合计税额</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-dup">0</div>
+      <div class="stat-label">重复发票</div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <div>
+      <div class="card">
+        <div class="card-title">上传文件</div>
+        <!-- Tab switcher -->
+        <div class="upload-tabs">
+          <button class="upload-tab active" id="tabPdf" onclick="switchUploadTab('pdf')">
+            <span class="tab-icon">📄</span>
+            <span class="tab-label">PDF 识别</span>
+            <span class="tab-sub">高清 · 推荐</span>
+          </button>
+          <button class="upload-tab" id="tabImg" onclick="switchUploadTab('img')">
+            <span class="tab-icon">📷</span>
+            <span class="tab-label">照片识别</span>
+            <span class="tab-sub">支持模糊/低光</span>
+          </button>
+        </div>
+
+        <!-- PDF pane -->
+        <div class="upload-pane active" id="panePdf">
+          <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" accept=".pdf" multiple>
+            <span class="drop-icon">📂</span>
+            <h3>拖拽 PDF 到此处</h3>
+            <p>或点击选择 · 支持批量</p>
+          </div>
+        </div>
+
+        <!-- Image pane -->
+        <div class="upload-pane" id="paneImg">
+          <div class="drop-zone-img" id="dropZoneImg">
+            <input type="file" id="imgInput" accept="image/*" multiple>
+            <span class="drop-icon" style="filter:drop-shadow(0 0 10px rgba(251,191,36,0.5))">🖼️</span>
+            <h3>拖拽发票照片到此处</h3>
+            <p>或点击选择 · JPG / PNG / HEIC · 批量</p>
+          </div>
+          <div class="photo-warn" id="photoWarn">
+            <span class="photo-warn-icon">⚠️</span>
+            <span>照片识别完成，结果可能存在误差，请仔细核对每条数据，避免出错。</span>
+          </div>
+        </div>
+
+        <div class="file-list" id="fileList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">处理选项</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">文件重命名</div>
+            <div class="setting-desc">识别后按字段组合命名文件</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="renameToggle" checked>
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          </label>
+        </div>
+        <div class="rename-rule" id="renameRow">
+          <div class="rename-segments" id="renameSegments"></div>
+          <div class="rename-bottom">
+            <button class="rename-add-btn" onclick="addRenameSegment()">＋ 添加片段</button>
+            <span class="rename-sep-label">分隔符</span>
+            <select class="rename-sep-select" id="renameSepSelect" onchange="onSepSelectChange()">
+              <option value="-">—</option>
+              <option value="_">＿</option>
+              <option value=" ">空格</option>
+              <option value="+">＋</option>
+              <option value="custom">自定义</option>
+            </select>
+            <input class="rename-sep-custom" id="renameSepCustom" placeholder="输入…" maxlength="5"
+              oninput="updateRenamePreview()" style="display:none">
+          </div>
+          <div class="rename-preview" id="renamePreview">预览：–</div>
+        </div>
+
+        <button class="btn-primary" id="startBtn" onclick="startExtract()">🚀 &nbsp;开始提取</button>
+
+        <div id="progressWrap" style="display:none">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+          <div class="progress-text" id="progressText"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">识别引擎</div>
+        <div class="setting-desc" style="margin-bottom:8px;color:var(--text2);font-size:11px">
+          本页已切换为本地 PaddleOCR（Python API）。<br>
+          请先启动 `paddle_invoice_api.py`，再点击“开始提取”。
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">运行日志</div>
+        <div class="log-area" id="logArea">
+          <div class="log-line"><span class="log-time">[系统]</span><span class="log-msg info">工具已就绪，请先启动本地Paddle API，再上传文件。</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-panel">
+      <div class="results-header">
+        <div class="results-title">识别结果</div>
+        <div class="results-actions">
+          <span class="count-badge" id="resultCount">0 条</span>
+          <button class="btn-sm" onclick="clearResults()">清空</button>
+          <button class="btn-sm" onclick="exportAllCsv()" title="导出全部表格数据（CSV），不去重">导出全部CSV</button>
+          <button class="btn-sm" onclick="exportValidCsv()" style="border-color:rgba(251,191,36,0.6);color:var(--warning)" title="只导出有效发票（CSV），重复发票不包含在内">导出有效发票CSV</button>
+        </div>
+      </div>
+
+      <!-- Column manager -->
+      <div class="col-manager-bar">
+        <div class="col-manager-header" onclick="toggleColManager()" style="cursor:pointer">
+          <span class="col-manager-title">字段管理</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span class="col-manager-hint">拖动排序 · 点击复选框显隐 · 自定义字段可删除</span>
+            <span id="colManagerArrow" style="color:var(--text3);font-size:11px;transition:transform 0.2s">▼</span>
+          </span>
+        </div>
+        <div class="col-manager-body open" id="colManagerBody">
+          <div class="col-list" id="colList"></div>
+          <div class="col-add-row">
+            <button class="col-add-btn" onclick="openColAddForm()">＋ 添加自定义字段</button>
+          </div>
+          <div class="col-add-form" id="colAddForm">
+            <div class="col-add-inputs">
+              <input class="col-add-input" id="newColName" placeholder="字段名称（如：合同号）" maxlength="20">
+              <input class="col-add-input" id="newColKw" placeholder="识别关键词（逗号分隔，可留空）">
+            </div>
+            <div class="col-add-actions">
+              <button class="col-add-cancel" onclick="closeColAddForm()">取消</button>
+              <button class="col-add-confirm" onclick="confirmAddCol()">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead id="resultHead"><tr></tr></thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState">
+          <span class="empty-icon">📋</span>
+          <p>上传发票后点击「开始提取」</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-top-bar"></div>
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">编辑发票信息</div>
+        <div class="modal-sub" id="modalFilename">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="form-group full">
+          <label class="form-label">发票类别</label>
+          <select class="form-select" id="edit-invoiceType">
+            <option>增值税专用发票</option>
+            <option>增值税普通发票</option>
+            <option>电子普通发票</option>
+            <option>电子专用发票</option>
+            <option>全电发票（普票）</option>
+            <option>全电发票（专票）</option>
+            <option>机动车销售统一发票</option>
+            <option>二手车销售统一发票</option>
+            <option>普通发票</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">发票号码</label>
+          <input class="form-input" id="edit-invoiceNum" placeholder="8-20位数字">
+        </div>
+        <div class="form-group">
+          <label class="form-label">发票代码（可选）</label>
+          <input class="form-input" id="edit-invoiceCode" placeholder="10-12位">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">开票日期</label>
+          <input class="form-input" id="edit-date" placeholder="如 2024年01月15日">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">购买方名称</label>
+          <input class="form-input" id="edit-buyer" placeholder="购方单位全称">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">销售方名称</label>
+          <input class="form-input" id="edit-seller" placeholder="销方单位全称">
+        </div>
+        <div class="form-group">
+          <label class="form-label">税前金额 (¥)</label>
+          <input class="form-input" id="edit-amount" placeholder="0.00" type="number" step="0.01" min="0" oninput="autoCalcTotal()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">税额 (¥)</label>
+          <input class="form-input" id="edit-tax" placeholder="0.00" type="number" step="0.01" min="0" oninput="autoCalcTotal()">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">价税合计 (¥)</label>
+          <input class="form-input" id="edit-total" placeholder="0.00" type="number" step="0.01" min="0">
+          <div class="form-hint">填写税前金额和税额后自动计算</div>
+        </div>
+        <div class="form-group full">
+          <label class="form-label">原始识别文本（仅参考）</label>
+          <div class="raw-preview" id="edit-raw"></div>
+        </div>
+        <!-- Custom fields injected here by JS -->
+        <div id="edit-custom-fields"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="modal-hint">修改后状态将标记为「已编辑」</span>
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-save" onclick="saveEdit()">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+let uploadedFiles = [];
+let results = [];
+let isProcessing = false;
+let editingIdx = -1;
+let dragSrcIdx = null;
+
+// ── Column definitions ─────────────────────────────────────
+// type: 'fixed' = built-in field, 'custom' = user-added
+// key: matches property name in result object (custom fields use 'cf_<id>')
+// visible: shown in table + exported
+// fixed columns cannot be deleted; all can be reordered and hidden
+let columns = [
+  { key:'invoiceType',  label:'发票类别',   type:'fixed',  visible:true },
+  { key:'invoiceNum',   label:'发票号码',   type:'fixed',  visible:true },
+  { key:'date',         label:'开票日期',   type:'fixed',  visible:true },
+  { key:'buyer',        label:'购买方',     type:'fixed',  visible:true },
+  { key:'seller',       label:'销售方',     type:'fixed',  visible:true },
+  { key:'amount',       label:'税前金额',   type:'fixed',  visible:true },
+  { key:'tax',          label:'税额',       type:'fixed',  visible:true },
+  { key:'total',        label:'价税合计',   type:'fixed',  visible:true },
+  { key:'invoiceCode',  label:'发票代码',   type:'fixed',  visible:false },
+];
+let cfIdCounter = 0;
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Column manager rendering ───────────────────────────────
+function renderColList() {
+  const el = document.getElementById('colList');
+  el.innerHTML = '';
+  columns.forEach((col, i) => {
+    const isFixed = col.type === 'fixed';
+    const row = document.createElement('div');
+    row.id = 'colrow-' + i;
+    row.className = 'col-row' + (!col.visible ? ' col-hidden' : '') + (isFixed ? ' col-fixed' : '');
+    row.draggable = true;
+    row.addEventListener('dragstart', e => onColDragStart(e, i));
+    row.addEventListener('dragover',  e => onColDragOver(e, i));
+    row.addEventListener('dragleave', e => onColDragLeave(e, i));
+    row.addEventListener('drop',      e => onColDrop(e, i));
+    row.addEventListener('dragend',   () => onColDragEnd());
+
+    // ⠿ drag handle
+    const handle = document.createElement('span');
+    handle.className = 'col-handle';
+    handle.textContent = '⠿';
+    handle.title = '拖动调整顺序';
+    row.appendChild(handle);
+
+    // visibility checkbox
+    const vis = document.createElement('div');
+    vis.className = 'col-vis' + (col.visible ? ' on' : '');
+    vis.title = col.visible ? '点击隐藏此列' : '点击显示此列';
+    vis.addEventListener('click', () => toggleColVis(i));
+    row.appendChild(vis);
+
+    // label or editable input
+    if (isFixed) {
+      const lbl = document.createElement('span');
+      lbl.className = 'col-label';
+      lbl.style.flex = '1';
+      lbl.textContent = col.label;
+      row.appendChild(lbl);
+    } else {
+      const inp = document.createElement('input');
+      inp.style.cssText = 'flex:1;background:transparent;border:none;color:var(--text);font-size:12px;outline:none;min-width:0;font-family:inherit';
+      inp.value = col.label;
+      inp.placeholder = '字段名称';
+      inp.addEventListener('input', () => renameCol(i, inp.value));
+      inp.addEventListener('mousedown', e => e.stopPropagation());
+      row.appendChild(inp);
+    }
+
+    // type badge
+    const badge = document.createElement('span');
+    badge.className = 'col-type-badge ' + col.type;
+    badge.textContent = isFixed ? '内置' : '自定义';
+    row.appendChild(badge);
+
+    // delete button (custom) or spacer (fixed)
+    if (isFixed) {
+      const sp = document.createElement('span');
+      sp.style.cssText = 'width:18px;flex-shrink:0';
+      row.appendChild(sp);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'col-del';
+      btn.title = '删除此字段';
+      btn.textContent = '×';
+      btn.addEventListener('click', () => deleteCol(i));
+      row.appendChild(btn);
+    }
+
+    el.appendChild(row);
+  });
+}
+
+
+function toggleColVis(i) {
+  columns[i].visible = !columns[i].visible;
+  renderColList();
+  renderTableHeader();
+  renderResults();
+}
+
+function renameCol(i, val) {
+  columns[i].label = val;
+  renderTableHeader();
+}
+
+function deleteCol(i) {
+  if (columns[i].type === 'fixed') return;
+  columns.splice(i, 1);
+  renderColList();
+  renderTableHeader();
+  renderResults();
+}
+
+function toggleColManager() {
+  const body = document.getElementById('colManagerBody');
+  const arrow = document.getElementById('colManagerArrow');
+  const isOpen = body.classList.toggle('open');
+  arrow.style.transform = isOpen ? '' : 'rotate(-90deg)';
+}
+
+// ── Drag-to-reorder ────────────────────────────────────────
+function onColDragStart(e, i) {
+  dragSrcIdx = i;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => { const el = document.getElementById('colrow-'+i); if(el) el.classList.add('dragging'); }, 0);
+}
+function onColDragOver(e, i) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.col-row').forEach(r => r.classList.remove('drag-over'));
+  const el = document.getElementById('colrow-'+i);
+  if (el && i !== dragSrcIdx) el.classList.add('drag-over');
+}
+function onColDragLeave(e, i) {
+  const el = document.getElementById('colrow-'+i);
+  if (el) el.classList.remove('drag-over');
+}
+function onColDrop(e, i) {
+  e.preventDefault();
+  if (dragSrcIdx === null || dragSrcIdx === i) return;
+  const moved = columns.splice(dragSrcIdx, 1)[0];
+  columns.splice(i, 0, moved);
+  dragSrcIdx = null;
+  document.querySelectorAll('.col-row').forEach(r => r.classList.remove('drag-over','dragging'));
+  renderColList();
+  renderTableHeader();
+  renderResults();
+}
+
+function onColDragEnd() {
+  dragSrcIdx = null;
+  document.querySelectorAll('.col-row').forEach(r => r.classList.remove('dragging', 'drag-over'));
+}
+
+// ── Add custom column ──────────────────────────────────────
+function openColAddForm() {
+  document.getElementById('colAddForm').classList.add('open');
+  document.getElementById('newColName').focus();
+}
+function closeColAddForm() {
+  document.getElementById('colAddForm').classList.remove('open');
+  document.getElementById('newColName').value = '';
+  document.getElementById('newColKw').value = '';
+}
+function confirmAddCol() {
+  const name = document.getElementById('newColName').value.trim();
+  if (!name) { document.getElementById('newColName').focus(); return; }
+  const keywords = document.getElementById('newColKw').value.trim();
+  const key = 'cf_' + (++cfIdCounter);
+  columns.push({ key, label: name, type: 'custom', visible: true, keywords });
+  closeColAddForm();
+  renderColList();
+  renderTableHeader();
+}
+
+// ── Table header ───────────────────────────────────────────
+function renderTableHeader() {
+  const tr = document.querySelector('#resultHead tr');
+  if (!tr) return;
+  const visCols = columns.filter(c => c.visible);
+  tr.innerHTML = '<th>#</th>' +
+    visCols.map(c => `<th>${escHtml(c.label)}</th>`).join('') +
+    '<th>状态</th><th>操作</th>';
+}
+
+// ── Dedup (invoice number only) ────────────────────────────
+function recomputeAllDuplicates() {
+  // Always dedup by invoice number — toggle is informational only
+  const seen = new Map();
+  results.forEach((r, i) => {
+    r.isDuplicate = false; r.dupOf = null;
+    const key = (r.invoiceNum || '').replace(/\s/g, '').replace(/^0+/, '').toLowerCase();
+    if (!key) return;
+    if (seen.has(key)) { r.isDuplicate = true; r.dupOf = seen.get(key) + 1; }
+    else seen.set(key, i);
+  });
+}
+
+// ── File handling ─────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf')));
+});
+fileInput.addEventListener('change', () => { addFiles(Array.from(fileInput.files)); fileInput.value = ''; });
+
+function addFiles(files, isImage = false) {
+  files.forEach(f => {
+    if (!uploadedFiles.find(x => x.name === f.name && x.size === f.size))
+      uploadedFiles.push({ file: f, name: f.name, status: 'pending', isImage });
+  });
+  renderFileList();
+  if (files.length) log(`已添加 ${files.length} 个文件`, 'info');
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  if (!uploadedFiles.length) { el.innerHTML = ''; return; }
+  el.innerHTML = uploadedFiles.map((f, i) => `
+    <div class="file-item ${f.status}">
+      <div class="file-dot ${f.status}">${{pending:'·',processing:'◌',done:'✓',error:'✕'}[f.status]||'·'}</div>
+      <div class="file-name" title="${f.name}">${f.name}</div>
+      ${!isProcessing ? `<button class="file-remove" onclick="removeFile(${i})">✕</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function removeFile(i) { uploadedFiles.splice(i, 1); renderFileList(); }
+
+// ── Rename rule state ─────────────────────────────────────
+// ── Rename rule state ─────────────────────────────────────
+// renameSegments: array of free-text strings entered by user
+let renameSegments = ['公司名称', '2024']; // default placeholders
+
+function onSepSelectChange() {
+  const sel = document.getElementById('renameSepSelect');
+  const customInp = document.getElementById('renameSepCustom');
+  const isCustom = sel.value === 'custom';
+  customInp.style.display = isCustom ? 'block' : 'none';
+  if (isCustom) customInp.focus();
+  renderRenameSegments(); // refresh separators shown between inputs
+}
+
+function getRenameSep() {
+  const sel = document.getElementById('renameSepSelect');
+  if (!sel) return '-';
+  if (sel.value === 'custom') {
+    const inp = document.getElementById('renameSepCustom');
+    return inp ? inp.value : '';
+  }
+  return sel.value;
+}
+
+function getSafeFilename(name) {
+  return name.replace(/[\/:*?"<>|]/g, '').trim();
+}
+
+function buildRenameString() {
+  // Join non-empty segments with the chosen separator
+  const sep = getRenameSep();
+  return renameSegments.map(s => getSafeFilename(s)).filter(Boolean).join(sep) || '未命名';
+}
+
+function buildRenamedFilename(r) {
+  if (!document.getElementById('renameToggle').checked) return r.filename;
+  return buildRenameString() + '.pdf';
+}
+
+function renderRenameSegments() {
+  const container = document.getElementById('renameSegments');
+  container.innerHTML = '';
+  const sep = getRenameSep();
+  renameSegments.forEach((val, i) => {
+    const row = document.createElement('div');
+    row.className = 'rename-seg-row';
+    // separator label (not shown for first segment)
+    if (i > 0) {
+      const sepEl = document.createElement('span');
+      sepEl.className = 'rename-seg-sep';
+      sepEl.textContent = sep;
+      row.appendChild(sepEl);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.style.cssText = 'width:14px;flex-shrink:0';
+      row.appendChild(spacer);
+    }
+    // text input
+    const inp = document.createElement('input');
+    inp.className = 'rename-seg-input';
+    inp.value = val;
+    inp.placeholder = '输入任意文本…';
+    inp.addEventListener('input', () => {
+      renameSegments[i] = inp.value;
+      updateRenamePreview();
+    });
+    row.appendChild(inp);
+    // delete button
+    const del = document.createElement('button');
+    del.className = 'rename-seg-del';
+    del.textContent = '×';
+    del.title = '删除此片段';
+    del.addEventListener('click', () => {
+      renameSegments.splice(i, 1);
+      renderRenameSegments();
+    });
+    row.appendChild(del);
+    container.appendChild(row);
+  });
+  updateRenamePreview();
+}
+
+function addRenameSegment() {
+  renameSegments.push('');
+  renderRenameSegments();
+  // focus the new input
+  const inputs = document.querySelectorAll('.rename-seg-input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function updateRenamePreview() {
+  const el = document.getElementById('renamePreview');
+  if (!el) return;
+  const name = buildRenameString();
+  el.textContent = '预览：' + name + '.pdf / ' + name + '.xlsx';
+}
+
+document.getElementById('renameToggle').addEventListener('change', function() {
+  document.getElementById('renameRow').style.opacity = this.checked ? '1' : '0.35';
+  updateRenamePreview();
+});
+
+// ── Log ──────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const area = document.getElementById('logArea');
+  const t = new Date().toTimeString().slice(0, 8);
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="log-time">[${t}]</span><span class="log-msg ${type}">${msg}</span>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ── Progress ──────────────────────────────────────────────
+function setProgress(pct, text) {
+  const wrap = document.getElementById('progressWrap');
+  if (pct === null) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = text;
+}
+
+// ── PDF text extraction with position info ────────────────
+
+// ── Upload tab switch ─────────────────────────────────────
+let activeUploadTab = 'pdf'; // 'pdf' | 'img'
+
+function switchUploadTab(tab) {
+  activeUploadTab = tab;
+  document.getElementById('tabPdf').classList.toggle('active', tab === 'pdf');
+  document.getElementById('tabImg').classList.toggle('active', tab === 'img');
+  document.getElementById('panePdf').classList.toggle('active', tab === 'pdf');
+  document.getElementById('paneImg').classList.toggle('active', tab === 'img');
+}
+
+// Image drop zone wiring
+const dropZoneImg = document.getElementById('dropZoneImg');
+const imgInput    = document.getElementById('imgInput');
+dropZoneImg.addEventListener('dragover', e => { e.preventDefault(); dropZoneImg.classList.add('drag-over'); });
+dropZoneImg.addEventListener('dragleave', () => dropZoneImg.classList.remove('drag-over'));
+dropZoneImg.addEventListener('drop', e => {
+  e.preventDefault(); dropZoneImg.classList.remove('drag-over');
+  const imgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  addFiles(imgs, true);
+});
+imgInput.addEventListener('change', () => {
+  addFiles(Array.from(imgInput.files), true);
+  imgInput.value = '';
+});
+
+// ── OCR via local Paddle API ─────────────────────────────
+const PADDLE_API_BASE_DEFAULT = 'http://127.0.0.1:8866';
+
+function getPaddleApiBase() {
+  const origin = window.location?.origin || '';
+  if (origin && origin !== 'null' && /^https?:\/\//i.test(origin)) {
+    return origin.trim();
+  }
+  return (localStorage.getItem('paddle_api_base') || PADDLE_API_BASE_DEFAULT).trim();
+}
+
+async function callPaddleExtract(file) {
+  const base = getPaddleApiBase();
+  const url = base.replace(/\/+$/, '') + '/api/paddle/extract';
+  const form = new FormData();
+  form.append('file', file, file.name);
+
+  let resp;
+  try {
+    resp = await fetch(url, { method: 'POST', body: form });
+  } catch (err) {
+    throw new Error(`无法连接本地Paddle服务 (${url})，请先启动 Python API：${err.message}`);
+  }
+
+  const rawText = await resp.text();
+  let payload = null;
+  try { payload = rawText ? JSON.parse(rawText) : null; } catch (_) {}
+  if (!resp.ok) {
+    const msg =
+      payload?.detail ||
+      payload?.message ||
+      (rawText ? rawText.slice(0, 240) : '') ||
+      `HTTP ${resp.status}`;
+    throw new Error(`Paddle识别失败: ${msg}`);
+  }
+
+  if (!payload) {
+    throw new Error(`Paddle接口返回了空响应或非JSON内容：${url}`);
+  }
+
+  const pages = payload?.pages || [];
+  if (!Array.isArray(pages) || pages.length === 0) {
+    throw new Error('Paddle返回为空，未识别到有效文本');
+  }
+  return {
+    pages,
+    contentHash: payload?.contentHash || '',
+    tokenCount: Number(payload?.tokenCount || 0),
+  };
+}
+
+async function checkPaddleService() {
+  const base = getPaddleApiBase();
+  const url = base.replace(/\/+$/, '') + '/api/health';
+  try {
+    const r = await fetch(url, { method: 'GET' });
+    if (!r.ok) throw new Error('health check failed');
+    return true;
+  } catch (_) {
+    throw new Error(`本地Paddle API未启动：${url}`);
+  }
+}
+
+async function extractImage(file) {
+  log('🔍 调用本地Paddle识别图片: ' + file.name, 'info');
+  const out = await callPaddleExtract(file);
+  log(`✓ Paddle识别完成: ${file.name}（${out.tokenCount || out.pages.flat().length} tokens）`, 'success');
+  return { pages: out.pages, contentHash: out.contentHash || '' };
+}
+
+async function extractPDF(file) {
+  log('📄 直接读取PDF文本层: ' + file.name, 'info');
+  const out = await callPaddleExtract(file);
+  log(`✓ PDF文本读取完成: ${file.name}（${out.pages.length}页）`, 'success');
+  return { pages: out.pages, contentHash: out.contentHash || '' };
+}
+
+// ── Invoice parser (v3 — numeric-focused) ─────────────────
+function parseInvoice(pages, filename) {
+  // ── 1. Build token list with full positional data ──────
+  const tokens = pages.flat();
+  // Raw concatenation for regex that span multiple tokens
+  const rawText = tokens.map(t => t.text).join(' ');
+  const C = rawText.replace(/\s+/g, ' '); // single-line normalised
+
+  // ── 2. Core helpers ────────────────────────────────────
+
+  // Parse any number-like string → float, or NaN
+  const normalizeNumString = (s) => {
+    let x = String(s || '')
+      .replace(/[¥￥Yy]/g, '')
+      .replace(/[，,\s]/g, '')
+      .trim();
+    const m = x.match(/-?\d+(?:\.\d+)?/);
+    return m ? m[0] : '';
+  };
+  const toNum = s => {
+    const n = normalizeNumString(s);
+    return n ? parseFloat(n) : NaN;
+  };
+
+  // Format to 2dp string, or ''
+  const fmt = v => {
+    const n = toNum(v);
+    return isNaN(n) || n < 0 ? '' : n.toFixed(2);
+  };
+
+  // Regex pick on concatenated text
+  function pickText(patterns) {
+    for (const re of patterns) {
+      const m = C.match(re);
+      if (m) {
+        const v = (m[2] || m[1] || '').replace(/\s+/g, '').trim();
+        if (v) return v;
+      }
+    }
+    return '';
+  }
+
+  // Check if a string looks like a valid money amount (must have digits)
+  const isMoneyStr = s => {
+    const n = normalizeNumString(s);
+    return !!n && /^\d+(?:\.\d+)?$/.test(n);
+  };
+
+  // Is this token a ¥/￥ currency symbol?
+  const isCurrencySymbol = t => /^[¥￥Yy]$/.test(t.text.trim());
+
+  // Is this token a standalone money value?
+  const isMoneyToken = t => /^[¥￥Yy]?[\d,，\s]+\.\d{2}$/.test(t.text.trim()) && /\d/.test(t.text);
+
+  // Extract numeric value from a token (strips leading ¥)
+  const tokenNum = t => toNum(t.text.replace(/^[¥￥Yy]/, ''));
+
+  function collectMoneyFromText(text) {
+    const out = [];
+    const re = /(?:[¥￥Yy]\s*)?\d{1,3}(?:[,\s，]\d{3})+(?:\.\d{2})|(?:[¥￥Yy]\s*)?\d+\.\d{2}/g;
+    for (const m of String(text || '').matchAll(re)) {
+      const v = toNum(m[0]);
+      if (!isNaN(v) && v > 0) out.push(v);
+    }
+    return out;
+  }
+
+  // ── 3. Build rows: group tokens by Y coordinate ────────
+  // Tokens on the same line (within 6px Y) are grouped as a row
+  // This is the KEY technique: amounts in invoice tables are column-aligned
+  const rows = [];
+  const usedIdx = new Set();
+  tokens.forEach((t, i) => {
+    if (usedIdx.has(i)) return;
+    const row = [{ ...t, origIdx: i }];
+    usedIdx.add(i);
+    tokens.forEach((t2, j) => {
+      if (usedIdx.has(j)) return;
+      if (Math.abs(t2.y - t.y) <= 6) { row.push({ ...t2, origIdx: j }); usedIdx.add(j); }
+    });
+    row.sort((a, b) => a.x - b.x);
+    rows.push(row);
+  });
+  rows.sort((a, b) => b[0].y - a[0].y); // PDF Y: larger = higher on page
+
+  // Row text concatenation
+  const rowText = r => r.map(t => t.text).join(' ');
+
+  // ── 4. Number extraction helpers ───────────────────────
+
+  // Find all money tokens in a row (handles: "¥1,234.56", "1234.56", "¥" + "1234.56" adjacent)
+  function rowMoneyValues(row) {
+    const vals = [];
+    for (let i = 0; i < row.length; i++) {
+      const t = row[i];
+      const cur = String(t.text || '').trim();
+      const next = i + 1 < row.length ? String(row[i + 1].text || '').trim() : '';
+      const next2 = i + 2 < row.length ? String(row[i + 2].text || '').trim() : '';
+
+      // Handle split thousands amount: "11," + "642.33"
+      if (/^\d{1,3}[,，]$/.test(cur) && /^\d{3}\.\d{2}$/.test(next)) {
+        const merged = `${cur}${next}`;
+        const v = toNum(merged);
+        if (!isNaN(v)) {
+          vals.push({ val: v, x: t.x, symIdx: i, numIdx: i + 1 });
+          i += 1;
+          continue;
+        }
+      }
+
+      // Handle split decimal amount: "11647." + "33"
+      if (/^\d+[.]$/.test(cur) && /^\d{2}$/.test(next)) {
+        const merged = `${cur}${next}`;
+        const v = toNum(merged);
+        if (!isNaN(v)) {
+          vals.push({ val: v, x: t.x, symIdx: i, numIdx: i + 1 });
+          i += 1;
+          continue;
+        }
+      }
+
+      // Handle fully split thousands amount: "11" + "," + "642.33"
+      if (/^\d{1,3}$/.test(cur) && /^[,，]$/.test(next) && /^\d{3}\.\d{2}$/.test(next2)) {
+        const merged = `${cur}${next}${next2}`;
+        const v = toNum(merged);
+        if (!isNaN(v)) {
+          vals.push({ val: v, x: t.x, symIdx: i, numIdx: i + 2 });
+          i += 2;
+          continue;
+        }
+      }
+
+      if (isCurrencySymbol(t) && i + 1 < row.length) {
+        // ¥ symbol followed by number token
+        const nextToken = row[i + 1];
+        if (isMoneyStr(nextToken.text)) {
+          vals.push({ val: toNum(nextToken.text), x: t.x, symIdx: i, numIdx: i + 1 });
+          i++; continue;
+        }
+      }
+      // Token already contains ¥ prefix
+      if (/^[¥￥Yy][\d,，\s]/.test(t.text)) {
+        const v = toNum(t.text.replace(/^[¥￥Yy]/, ''));
+        if (!isNaN(v)) { vals.push({ val: v, x: t.x, symIdx: i, numIdx: i }); continue; }
+      }
+      // Plain number with decimals (e.g. "1234.56")
+      if (/^[\d,，\s]+\.\d{2}$/.test(t.text.trim())) {
+        const v = toNum(t.text);
+        if (!isNaN(v) && v > 0) { vals.push({ val: v, x: t.x, symIdx: i, numIdx: i }); }
+      }
+    }
+    return vals;
+  }
+
+  // After a label token index, get the very next numeric token (skipping ¥ symbols)
+  function numAfterTokenIdx(labelIdx, maxHop = 10) {
+    for (let j = labelIdx + 1; j < labelIdx + maxHop && j < tokens.length; j++) {
+      const t = tokens[j];
+      if (isCurrencySymbol(t)) continue;
+      if (isMoneyStr(t.text) || /^[¥￥][\d,，]/.test(t.text)) {
+        return toNum(t.text.replace(/^[¥￥]/, ''));
+      }
+    }
+    return NaN;
+  }
+
+  // After a label token INDEX in a specific ROW, get next money values on that same row
+  function numsOnSameRow(labelToken) {
+    const row = rows.find(r => r.some(t => t.origIdx === labelToken.origIdx || (Math.abs(t.x - labelToken.x) < 3 && Math.abs(t.y - labelToken.y) < 4)));
+    if (!row) return [];
+    return rowMoneyValues(row.filter(t => t.x > labelToken.x));
+  }
+
+  // ── 5. Invoice type ────────────────────────────────────
+  let invoiceType = '增值税普通发票';
+  const typeMap = [
+    [/全电.*专.*票|数电.*专.*票/, '全电发票（专票）'],
+    [/全电.*普.*票|数电.*普.*票/, '全电发票（普票）'],
+    [/电子.*增值税.*专用|增值税.*电子.*专用发票/, '电子专用发票'],
+    [/电子.*增值税.*普通|增值税.*电子.*普通发票/, '电子普通发票'],
+    [/增值税.*专用发票/, '增值税专用发票'],
+    [/增值税.*普通发票/, '增值税普通发票'],
+    [/机动车销售统一发票/, '机动车销售统一发票'],
+    [/二手车销售统一发票/, '二手车销售统一发票'],
+    [/专用发票/, '增值税专用发票'],
+  ];
+  for (const [re, label] of typeMap) { if (re.test(C)) { invoiceType = label; break; } }
+
+  // ── 6. Invoice number (纯数字，8-20位) ────────────────
+  // Strategy A: label + adjacent token
+  let invoiceNum = '';
+  const numLabelIdx = tokens.findIndex(t => /发票号码/.test(t.text));
+  if (numLabelIdx >= 0) {
+    for (let j = numLabelIdx; j < numLabelIdx + 6 && j < tokens.length; j++) {
+      const m = tokens[j].text.replace(/\s/g,'').match(/([0-9]{8,20})/);
+      if (m) { invoiceNum = m[1]; break; }
+    }
+  }
+  // Strategy B: regex on merged text
+  if (!invoiceNum) {
+    invoiceNum = pickText([
+      /发票号码\s*[：:号]?\s*([0-9]{8,20})/,
+      /号\s*码\s*[：:]\s*([0-9]{8,20})/,
+      /No[.．:：]?\s*([0-9]{8,20})/i,
+    ]);
+  }
+  // Strategy C: standalone long digit sequences (全电发票 20位)
+  if (!invoiceNum) {
+    const m20 = C.match(/(?<![0-9])([0-9]{20})(?![0-9])/);
+    if (m20) invoiceNum = m20[1];
+  }
+  // Strategy D: 8-digit fallback (avoid tax IDs which are 15/18 digits)
+  if (!invoiceNum) {
+    const m8 = C.match(/(?<![0-9])([0-9]{8})(?![0-9])/);
+    if (m8) invoiceNum = m8[1];
+  }
+
+  // ── 7. Invoice code ────────────────────────────────────
+  let invoiceCode = '';
+  const codeLabelIdx = tokens.findIndex(t => /发票代码/.test(t.text));
+  if (codeLabelIdx >= 0) {
+    for (let j = codeLabelIdx; j < codeLabelIdx + 6 && j < tokens.length; j++) {
+      const m = tokens[j].text.replace(/\s/g,'').match(/([0-9]{10,12})/);
+      if (m) { invoiceCode = m[1]; break; }
+    }
+  }
+  if (!invoiceCode) {
+    invoiceCode = pickText([
+      /发票代码\s*[：:号]?\s*([0-9]{10,12})/,
+      /代\s*码\s*[：:]\s*([0-9]{10,12})/,
+    ]);
+  }
+
+  // ── 8. Date ────────────────────────────────────────────
+  let date = pickText([
+    /开票日期\s*[：:]?\s*(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/,
+    /(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/,
+    /(\d{4}-\d{2}-\d{2})/,
+    /(\d{4}\/\d{2}\/\d{2})/,
+  ]);
+  // Token-level: find "开票日期" then grab tokens with year/month/day
+  if (!date) {
+    const dateLabelIdx = tokens.findIndex(t => /开票日期/.test(t.text));
+    if (dateLabelIdx >= 0) {
+      const parts = [];
+      for (let j = dateLabelIdx; j < dateLabelIdx + 10 && j < tokens.length; j++) {
+        if (/\d{4}年/.test(tokens[j].text) || /\d{1,2}月/.test(tokens[j].text) || /\d{1,2}日/.test(tokens[j].text))
+          parts.push(tokens[j].text.trim());
+        if (parts.length && /日/.test(parts[parts.length-1])) break;
+      }
+      if (parts.length) date = parts.join('').replace(/\s/g,'');
+    }
+  }
+
+  // ── 9. Buyer & Seller ──────────────────────────────────
+  function afterLabel(labelRes, maxTokens = 20) {
+    for (const labelRe of labelRes) {
+      const li = tokens.findIndex(t => labelRe.test(t.text));
+      if (li < 0) continue;
+      const lbl = tokens[li];
+      for (let j = li + 1; j < li + maxTokens && j < tokens.length; j++) {
+        const t = tokens[j];
+        const dx = t.x - lbl.x, dy = lbl.y - t.y;
+        if (!t.text.trim()) continue;
+        if ((dx > 5 && Math.abs(dy) < 25) || (Math.abs(dx) < 80 && dy > -5 && dy < 55)) {
+          if (!/[：:]$/.test(t.text) && !/^(名称|税号|地址|开户|账号|发票|代码|号码|日期|合计|价税|小写|大写|统一社会)/.test(t.text)
+              && !/^[0-9¥￥]/.test(t.text)) {
+            return t.text.trim();
+          }
+        }
+      }
+    }
+    return '';
+  }
+
+  let buyer = pickText([
+    /购\s*买\s*方[\s\S]{0,4}名\s*称\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s*(?:纳税|统一|地址|电话|开户|账号)|\s{2,})/,
+    /购方名称\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s{2,}|[：:]|\n)/,
+    /购货单位\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s{2,}|\n)/,
+  ]);
+  if (!buyer) buyer = afterLabel([/^购\s*买\s*方$/, /^购方$/, /^买方名称$/], 18);
+
+  let seller = pickText([
+    /销\s*售\s*方[\s\S]{0,4}名\s*称\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s*(?:纳税|统一|地址|电话|开户|账号)|\s{2,})/,
+    /销方名称\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s{2,}|[：:]|\n)/,
+    /销货单位\s*[：:]\s*([\u4e00-\u9fa5（）()A-Za-z0-9·\s]{4,50}?)(?=\s{2,}|\n)/,
+  ]);
+  if (!seller) seller = afterLabel([/^销\s*售\s*方$/, /^销方$/, /^卖方名称$/], 18);
+
+  // Company name heuristic fallback
+  if (!buyer || !seller) {
+    const orgRe = /^[\u4e00-\u9fa5·（）]{2,}(?:公司|企业|工厂|商行|事务所|医院|学校|研究院|研究所|局|处|厅|院|社|部|厂|店|行|中心)[\u4e00-\u9fa5（）()]*$/;
+    const orgs = tokens.filter(t => orgRe.test(t.text.trim())).map(t => t.text.trim());
+    if (!buyer && orgs[0]) buyer = orgs[0];
+    if (!seller && orgs.length >= 2) seller = orgs[1];
+    else if (!seller && orgs[0] && orgs[0] !== buyer) seller = orgs[0];
+  }
+
+  // ── 10. AMOUNTS — Row-based spatial extraction ─────────
+  // This is the core improvement: we work directly with token rows,
+  // not with concatenated strings. Handles split ¥ + number tokens.
+
+  let amount = '', tax = '', total = '';
+
+  // ── 10a. 价税合计 row (most reliable — unique row in all invoice types) ──
+  const totalRow = rows.find(r => {
+    const txt = rowText(r);
+    return /价税合计/.test(txt) || /小写/.test(txt);
+  });
+  if (totalRow) {
+    const moneys = rowMoneyValues(totalRow);
+    // The LAST money value on this row is the total (大写 comes first, 小写 last)
+    // Or if only one, that's it
+    if (moneys.length > 0) {
+      total = fmt(moneys[moneys.length - 1].val);
+    }
+    // Also look at token-level: "小写" then ¥ then number
+    const xiaoXieIdx = totalRow.findIndex(t => /小写/.test(t.text));
+    if (xiaoXieIdx >= 0 && moneys.length === 0) {
+      for (let j = xiaoXieIdx + 1; j < totalRow.length; j++) {
+        if (isCurrencySymbol(totalRow[j]) && j + 1 < totalRow.length) {
+          const v = toNum(totalRow[j + 1].text); if (!isNaN(v) && v > 0) { total = fmt(v); break; }
+        }
+        if (/^[¥￥][\d,]/.test(totalRow[j].text)) { total = fmt(toNum(totalRow[j].text.slice(1))); break; }
+        if (/^[\d,]+\.\d{2}$/.test(totalRow[j].text)) { total = fmt(toNum(totalRow[j].text)); break; }
+      }
+    }
+  }
+  // Also try token-stream for total
+  if (!total) {
+    const totalLblIdx = tokens.findIndex(t => /价税合计/.test(t.text));
+    if (totalLblIdx >= 0) {
+      const v = numAfterTokenIdx(totalLblIdx, 12);
+      if (!isNaN(v) && v > 0) total = fmt(v);
+    }
+  }
+
+  // ── 10b. 合计 row (contains amount + tax side by side) ──
+  // Standard invoice format: "合计" row has two ¥ columns: [金额列] [税额列]
+  // We identify the X positions of these columns from the header row
+  let amountColX = -1, taxColX = -1;
+
+  // Find the column header row: contains both "金额" and "税额"
+  const headerRow = rows.find(r => {
+    const txt = rowText(r);
+    return /金\s*额/.test(txt) && /税\s*额/.test(txt);
+  });
+  if (headerRow) {
+    const amtHdrToken = headerRow.find(t => /金\s*额/.test(t.text));
+    const taxHdrToken = headerRow.find(t => /税\s*额/.test(t.text));
+    if (amtHdrToken) amountColX = amtHdrToken.x + (amtHdrToken.w || 0) / 2;
+    if (taxHdrToken) taxColX = taxHdrToken.x + (taxHdrToken.w || 0) / 2;
+  }
+
+  // Find the 合计 row
+  const subtotalRow = rows.find(r => {
+    const txt = rowText(r);
+    return /^合\s*计$|合\s*计\s*$|^\s*合\s*计/.test(txt) && !/(价税|合计价税)/.test(txt);
+  });
+
+  if (subtotalRow) {
+    const moneys = rowMoneyValues(subtotalRow);
+    if (moneys.length >= 2 && amountColX >= 0 && taxColX >= 0) {
+      // Assign by proximity to known column X positions
+      const sortedByDist = (targetX) => [...moneys].sort((a, b) => Math.abs(a.x - targetX) - Math.abs(b.x - targetX));
+      const bestAmount = sortedByDist(amountColX)[0];
+      const bestTax    = sortedByDist(taxColX)[0];
+      if (bestAmount && bestTax && bestAmount !== bestTax) {
+        amount = fmt(bestAmount.val);
+        tax    = fmt(bestTax.val);
+      }
+    }
+    // Fallback: if 2 money vals found on row and no column header matched
+    if (!amount && !tax && moneys.length >= 2) {
+      // Left value = amount (smaller X), right value = tax
+      amount = fmt(moneys[0].val);
+      tax    = fmt(moneys[1].val);
+    }
+    // If only one money value on 合计 row and total known, try to derive
+    if (!amount && moneys.length === 1) {
+      const onlyVal = moneys[0].val;
+      if (total) {
+        const t = toNum(total);
+        if (Math.abs(onlyVal - t) > 0.01) amount = fmt(onlyVal); // it's not total
+      } else {
+        amount = fmt(onlyVal);
+      }
+    }
+  }
+
+  // ── 10c. Token-level label scan for individual fields ──
+  // Scan token stream: find 合计 or label tokens, then grab numeric neighbours
+  if (!amount || !tax) {
+    // Find ALL "合计" label tokens
+    const subtotalLabelIdxs = tokens
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => /^合\s*计$/.test(t.text.trim()) && !/价税/.test(t.text));
+
+    for (const { t: lbl, i: li } of subtotalLabelIdxs) {
+      // Collect money tokens on the same row as this label
+      const sameRowTokens = tokens.filter((t2, idx) => idx !== li && Math.abs(t2.y - lbl.y) <= 6);
+      const moneyOnRow = sameRowTokens
+        .filter(t2 => isMoneyStr(t2.text) || isCurrencySymbol(t2) || /^[¥￥][\d,]/.test(t2.text))
+        .sort((a, b) => a.x - b.x);
+
+      // Resolve ¥ + number pairs on same row
+      const resolvedVals = [];
+      for (let k = 0; k < moneyOnRow.length; k++) {
+        if (isCurrencySymbol(moneyOnRow[k])) {
+          if (k + 1 < moneyOnRow.length && isMoneyStr(moneyOnRow[k+1].text)) {
+            resolvedVals.push({ val: toNum(moneyOnRow[k+1].text), x: moneyOnRow[k].x }); k++;
+          }
+        } else {
+          const raw = moneyOnRow[k].text.replace(/^[¥￥]/, '');
+          if (isMoneyStr(raw)) resolvedVals.push({ val: toNum(raw), x: moneyOnRow[k].x });
+        }
+      }
+
+      if (resolvedVals.length >= 2) {
+        if (!amount) amount = fmt(resolvedVals[0].val);
+        if (!tax)    tax    = fmt(resolvedVals[1].val);
+        break;
+      }
+    }
+  }
+
+  // ── 10d. Explicit label token search ──
+  if (!tax) {
+    const taxLabelIdx = tokens.findIndex(t => /^税\s*额$/.test(t.text.trim()) || /税额[：:]/.test(t.text));
+    if (taxLabelIdx >= 0) {
+      const v = numAfterTokenIdx(taxLabelIdx, 8);
+      if (!isNaN(v) && v >= 0) tax = fmt(v);
+    }
+  }
+  if (!amount) {
+    const amtLabelIdx = tokens.findIndex(t => /^金\s*额$/.test(t.text.trim()) || /合计金额[：:]/.test(t.text));
+    if (amtLabelIdx >= 0) {
+      const v = numAfterTokenIdx(amtLabelIdx, 8);
+      if (!isNaN(v) && v >= 0) amount = fmt(v);
+    }
+  }
+
+  // ── 10e. Cross-validation & fallback calc ──────────────
+  // If we have total and tax but no amount → derive
+  if (!amount && total && tax) {
+    const derived = toNum(total) - toNum(tax);
+    if (derived >= 0) amount = fmt(derived);
+  }
+  // If we have total and amount but no tax → derive
+  if (!tax && total && amount) {
+    const derived = toNum(total) - toNum(amount);
+    if (derived >= 0) tax = fmt(derived);
+  }
+  // If amount and tax but no total → calc
+  if (!total && amount && tax) {
+    const t = toNum(amount) + toNum(tax);
+    if (t > 0) total = fmt(t);
+  }
+
+  // ── 10f. Sanity check: amount + tax should ≈ total ─────
+  if (amount && tax && total) {
+    const calcTotal = toNum(amount) + toNum(tax);
+    const storedTotal = toNum(total);
+    // If off by more than 1 yuan, something is wrong — keep total, recalc amount
+    if (Math.abs(calcTotal - storedTotal) > 1.0) {
+      // total is usually the most reliably extracted; trust it
+      // recalc: if tax is small (looks like tax rate applied), keep tax and derive amount
+      const possibleAmount = storedTotal - toNum(tax);
+      if (possibleAmount > 0) amount = fmt(possibleAmount);
+    }
+  }
+
+  // ── 10g. Last resort: all ¥ amounts in document ────────
+  if (!total) {
+    const allMoney = [...collectMoneyFromText(C)];
+    for (let i = 0; i < tokens.length; i++) {
+      if (isCurrencySymbol(tokens[i]) && i + 1 < tokens.length && isMoneyStr(tokens[i+1].text)) {
+        allMoney.push(toNum(tokens[i+1].text));
+      } else if (/^[¥￥Yy][\d,，\s]/.test(tokens[i].text)) {
+        allMoney.push(toNum(tokens[i].text.slice(1)));
+      } else if (/^[\d,，\s]+\.\d{2}$/.test(tokens[i].text.trim())) {
+        allMoney.push(toNum(tokens[i].text));
+      }
+    }
+    const validMoney = allMoney.filter(v => !isNaN(v) && v > 0);
+    if (validMoney.length) total = fmt(Math.max(...validMoney));
+  }
+
+  // ── 10h. Non-invoice document fallback (完税证明/支票/收据等) ───
+  const isInvoiceLike = /发票/.test(C);
+  const isReceiptLike = /完税|税收|税票|凭证|缴款|收据|支票/.test(C);
+  if (!isInvoiceLike && isReceiptLike) {
+    if (/税收完税证明/.test(C)) invoiceType = '税收完税证明';
+    else if (/支票/.test(C)) invoiceType = '支票票据';
+    else invoiceType = '其他票据';
+
+    const labeledDocNo = pickText([
+      /(?:系统税票号码|税票号码|原凭证号|凭证号|票据号码|票号|单号|编号)\s*[：:]?\s*([A-Za-z0-9-]{6,30})/,
+    ]);
+    if (labeledDocNo) invoiceNum = labeledDocNo.replace(/\s+/g, '');
+
+    if (!invoiceNum) {
+      const candidates = Array.from(C.matchAll(/[A-Za-z]?\d{8,25}/g))
+        .map(m => m[0].replace(/\s+/g, ''));
+      if (candidates.length) {
+        candidates.sort((a, b) => b.replace(/\D/g, '').length - a.replace(/\D/g, '').length);
+        invoiceNum = candidates[0];
+      }
+    }
+
+    if (!date) {
+      date = pickText([
+        /(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/,
+        /(\d{4}-\d{2}-\d{2})/,
+        /(\d{4}\/\d{2}\/\d{2})/,
+      ]);
+    }
+
+    if (!buyer) {
+      buyer = pickText([
+        /纳税人名称\s*[：:]?\s*([\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,40})/,
+        /收款人\s*[：:]?\s*([\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,40})/,
+      ]);
+    }
+    if (!seller) {
+      seller = pickText([
+        /税务机关\s*[：:]?\s*([\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,60})/,
+        /付款人\s*[：:]?\s*([\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,40})/,
+      ]);
+    }
+
+    const moneyCandidates = collectMoneyFromText(C)
+      .filter(v => !isNaN(v) && v > 0)
+      .sort((a, b) => b - a);
+
+    if (!total && moneyCandidates.length) total = fmt(moneyCandidates[0]);
+    if (!amount && moneyCandidates.length) {
+      amount = fmt(moneyCandidates.length >= 2 ? moneyCandidates[1] : moneyCandidates[0]);
+    }
+    if (!tax && total && amount) {
+      const diff = toNum(total) - toNum(amount);
+      if (!isNaN(diff) && diff > 0 && diff < toNum(total)) tax = fmt(diff);
+    }
+  }
+
+  // ── 11. Clean string helper ────────────────────────────
+  const cs = s => (s || '')
+    .replace(/^[：:，,\s·★☆▶►▸→]+/, '')
+    .replace(/[：:，,\s·★☆▶►▸→]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+
+  // ── 12. Custom field extraction ────────────────────
+  // Reads from the global `columns` array (type === 'custom' entries)
+  const customFieldValues = {};
+  const customCols = columns.filter(col => col.type === 'custom');
+  for (const col of customCols) {
+    const kwds = (col.keywords || '').split(/[,，;；]+/).map(k => k.trim()).filter(Boolean);
+    let found = '';
+    for (const kw of kwds) {
+      if (!kw) continue;
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(escaped + '\\s*[：:]\\s*([^\\n：:]{1,50})', 'i');
+      const m = C.match(re);
+      if (m && m[1] && m[1].trim()) { found = m[1].trim(); break; }
+      const tIdx = tokens.findIndex(t => t.text.includes(kw));
+      if (tIdx >= 0) {
+        for (let j = tIdx + 1; j < tIdx + 8 && j < tokens.length; j++) {
+          const v = tokens[j].text.trim();
+          if (v && !/^[：:，,]/.test(v) && v !== kw) { found = v; break; }
+        }
+        if (found) break;
+      }
+    }
+    customFieldValues[col.key] = cs(found);
+  }
+
+  return {
+    id: `${Date.now()}_${Math.random()}`,
+    filename,
+    invoiceType,
+    invoiceNum:  cs(invoiceNum),   // '' if not found — no random fallback (breaks dedup)
+    invoiceCode: cs(invoiceCode),
+    date:        cs(date).replace(/\s/g, ''),
+    buyer:       cs(buyer),
+    seller:      cs(seller),
+    amount:      fmt(amount),
+    tax:         fmt(tax),
+    total:       fmt(total),
+    customFields: customFieldValues,
+    rawText:     rawText.slice(0, 1200),
+    _debugRows:  rows.slice(0, 40).map(r => rowText(r)).filter(t => t.trim()).join('\n'),
+    isDuplicate: false,
+    dupOf:       null,
+    isEdited:    false,
+    _contentHash: '',  // filled in by caller after PDF extraction
+  };
+}
+
+// ── Extract flow ──────────────────────────────────────────
+async function startExtract() {
+  if (isProcessing) return;
+  if (!uploadedFiles.length) { log('请先上传文件', 'warn'); return; }
+
+  try {
+    await checkPaddleService();
+  } catch (err) {
+    log(err.message, 'error');
+    return;
+  }
+
+  isProcessing = true;
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true; btn.textContent = '⏳  处理中...';
+  setProgress(0, '准备中...');
+  log(`开始处理 ${uploadedFiles.length} 个文件`, 'info');
+
+  // Hide photo-warn before run; show after if any image was processed
+  document.getElementById('photoWarn').classList.remove('show');
+  let hasImageFile = false;
+
+  const pending = uploadedFiles.filter(f => f.status === 'pending');
+
+  for (let i = 0; i < pending.length; i++) {
+    const item = pending[i];
+    const gi = uploadedFiles.indexOf(item);
+    uploadedFiles[gi].status = 'processing';
+    renderFileList();
+    setProgress(Math.round(i / pending.length * 100), `${i+1}/${pending.length} — ${item.name}`);
+    log(`处理中: ${item.name}`, 'info');
+
+    try {
+      await new Promise(r => setTimeout(r, 20));
+      const isImg = item.isImage || /\.(jpe?g|png|gif|bmp|webp|heic|tiff?)$/i.test(item.name);
+      let pages, contentHash;
+      if (isImg) {
+        hasImageFile = true;
+        ({ pages, contentHash } = await extractImage(item.file));
+      } else {
+        ({ pages, contentHash } = await extractPDF(item.file));
+      }
+      const inv = parseInvoice(pages, item.name);
+      inv._contentHash = contentHash;
+      inv._fromImage = isImg;
+
+      results.push(inv);
+      uploadedFiles[gi].status = 'done';
+
+      const missing = [];
+      if (!inv.invoiceNum) missing.push('号码');
+      if (!inv.buyer)      missing.push('购方');
+      if (!inv.seller)     missing.push('销方');
+      if (!inv.date)       missing.push('日期');
+      if (!inv.total)      missing.push('合计');
+
+      if (missing.length)
+        log(`✓ ${item.name} ⚠ 未识别: ${missing.join('、')}`, 'warn');
+      else
+        log(`✓ ${item.name}  ${inv.invoiceNum}  ¥${inv.total}`, 'success');
+
+    } catch(err) {
+      uploadedFiles[gi].status = 'error';
+      log(`✕ ${item.name}: ${err.message}`, 'error');
+    }
+
+    renderFileList();
+  }
+
+  // Show photo accuracy warning if any image was processed
+  if (hasImageFile) {
+    document.getElementById('photoWarn').classList.add('show');
+    // Also switch to img tab so user sees the warning
+    switchUploadTab('img');
+  }
+
+  // ── Run dedup over ALL results at the end (single pass, reliable) ──
+  recomputeAllDuplicates();
+  const dupCount = results.filter(r => r.isDuplicate).length;
+  if (dupCount > 0) log(`⚠ 发现 ${dupCount} 张重复发票（已标记，导出时可选择排除）`, 'warn');
+
+  renderResults();
+  updateStats();
+  setProgress(100, `完成！处理 ${pending.length} 个文件`);
+  log(`全部处理完毕，共 ${results.length} 条记录`, 'success');
+  btn.disabled = false; btn.textContent = '🚀  开始提取';
+  isProcessing = false;
+  setTimeout(() => setProgress(null), 3000);
+}
+
+// ── Render table ──────────────────────────────────────────
+function getCellValue(r, col) {
+  // Money columns
+  if (['amount','tax','total'].includes(col.key)) {
+    const v = r[col.key];
+    if (!v) return '<span class="field-missing">—</span>';
+    const cls = col.key==='total' ? 'td-amount' : col.key==='tax' ? 'td-tax-val' : 'td-sub';
+    return `<span class="${cls}">¥${Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2})}</span>`;
+  }
+  // Invoice type badge
+  if (col.key === 'invoiceType') {
+    return `<span class="tag tag-type">${escHtml(r.invoiceType||'')}</span>`;
+  }
+  // Invoice number (monospace)
+  if (col.key === 'invoiceNum') {
+    return r.invoiceNum
+      ? `<span class="td-mono">${escHtml(r.invoiceNum)}</span>`
+      : '<span class="field-missing">—</span>';
+  }
+  // Custom field
+  if (col.key.startsWith('cf_')) {
+    const v = r.customFields && r.customFields[col.key];
+    return v ? `<span class="td-long" title="${escHtml(v)}">${escHtml(v)}</span>` : '<span class="field-missing">—</span>';
+  }
+  // Default string
+  const v = r[col.key];
+  return v ? `<span class="td-long" title="${escHtml(v)}">${escHtml(v)}</span>` : '<span class="field-missing">未识别</span>';
+}
+
+const INLINE_MONEY_KEYS = new Set(['amount', 'tax', 'total']);
+
+function getRawCellValue(r, colKey) {
+  if (colKey.startsWith('cf_')) {
+    return (r.customFields && r.customFields[colKey]) || '';
+  }
+  return r[colKey] || '';
+}
+
+function normalizeMoneyInput(value) {
+  const text = String(value || '').replace(/[^\d.\-]/g, '');
+  const num = parseFloat(text);
+  if (!Number.isFinite(num) || num < 0) return '';
+  return num.toFixed(2);
+}
+
+function applyInlineEdit(rowIdx, colKey, newValue) {
+  const r = results[rowIdx];
+  if (!r) return;
+
+  let finalValue = String(newValue == null ? '' : newValue).trim();
+  if (INLINE_MONEY_KEYS.has(colKey)) {
+    finalValue = normalizeMoneyInput(finalValue);
+  }
+
+  if (colKey.startsWith('cf_')) {
+    if (!r.customFields) r.customFields = {};
+    r.customFields[colKey] = finalValue;
+  } else {
+    r[colKey] = finalValue;
+  }
+
+  r.isEdited = true;
+  if (colKey === 'invoiceNum') recomputeAllDuplicates();
+  renderResults();
+  updateStats();
+  log(`已在表格中修改第 ${rowIdx + 1} 条`, 'warn');
+}
+
+function startInlineEdit(td, rowIdx, colKey) {
+  if (isProcessing || !td || td.dataset.editing === '1') return;
+  const r = results[rowIdx];
+  if (!r) return;
+
+  td.dataset.editing = '1';
+  const currentValue = String(getRawCellValue(r, colKey));
+  const input = document.createElement('input');
+  input.className = 'inline-editor';
+  input.type = INLINE_MONEY_KEYS.has(colKey) ? 'number' : 'text';
+  if (input.type === 'number') {
+    input.step = '0.01';
+    input.min = '0';
+  }
+  input.value = currentValue;
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finish = (save) => {
+    if (finished) return;
+    finished = true;
+    delete td.dataset.editing;
+    if (save) applyInlineEdit(rowIdx, colKey, input.value);
+    else renderResults();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true), { once: true });
+}
+
+function renderResults() {
+  const body = document.getElementById('resultBody');
+  const empty = document.getElementById('emptyState');
+  document.getElementById('resultCount').textContent = `${results.length} 条`;
+
+  if (!results.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const visCols = columns.filter(c => c.visible);
+
+  body.innerHTML = results.map((r, i) => {
+    const missingCount = [r.invoiceNum, r.buyer, r.seller, r.date, r.total].filter(v => !v).length;
+    let statusTag;
+    if (r.isDuplicate) {
+      statusTag = `<span class="tag tag-dup" title="${r.dupOf?'与第'+r.dupOf+'条重复':'重复'}">重复</span>`;
+    } else if (r.isEdited) {
+      statusTag = `<span class="tag tag-edited">已编辑</span>`;
+    } else if (missingCount > 0) {
+      statusTag = `<span class="tag tag-fail">${missingCount}项缺失</span>`;
+    } else {
+      statusTag = `<span class="tag tag-ok">完整</span>`;
+    }
+
+    const cells = visCols.map(col =>
+      `<td class="cell-editable" ondblclick="startInlineEdit(this, ${i}, '${col.key}')">${getCellValue(r, col)}</td>`
+    ).join('');
+
+    return `<tr class="${r.isDuplicate ? 'is-dup' : ''}">
+      <td class="td-mono" style="color:var(--text3)">${i+1}</td>
+      ${cells}
+      <td>${statusTag}</td>
+      <td><button class="btn-sm edit" onclick="openEdit(${i})">✏ 编辑</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Stats ─────────────────────────────────────────────────
+function updateStats() {
+  const valid = results.filter(r => !r.isDuplicate);
+  const sumTotal = valid.reduce((s,r) => s + (parseFloat(r.total)||0), 0);
+  const sumTax   = valid.reduce((s,r) => s + (parseFloat(r.tax)||0), 0);
+  document.getElementById('stat-total').textContent = results.length;
+  document.getElementById('stat-amount').textContent = '¥' + sumTotal.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('stat-tax').textContent    = '¥' + sumTax.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('stat-dup').textContent    = results.filter(r=>r.isDuplicate).length;
+}
+
+// ── Edit modal ────────────────────────────────────────────
+function openEdit(idx) {
+  editingIdx = idx;
+  const r = results[idx];
+  document.getElementById('modalFilename').textContent = r.filename;
+  document.getElementById('edit-invoiceType').value = r.invoiceType;
+  document.getElementById('edit-invoiceNum').value  = r.invoiceNum;
+  document.getElementById('edit-invoiceCode').value = r.invoiceCode;
+  document.getElementById('edit-date').value   = r.date;
+  document.getElementById('edit-buyer').value  = r.buyer;
+  document.getElementById('edit-seller').value = r.seller;
+  document.getElementById('edit-amount').value = r.amount;
+  document.getElementById('edit-tax').value    = r.tax;
+  document.getElementById('edit-total').value  = r.total;
+  document.getElementById('edit-raw').textContent = r._debugRows || r.rawText || '（无原始文本）';
+
+  // Render custom column inputs (columns with type==='custom')
+  const cfCols = columns.filter(c => c.type === 'custom' && c.label.trim());
+  const cfContainer = document.getElementById('edit-custom-fields');
+  if (cfCols.length > 0) {
+    cfContainer.innerHTML =
+      '<div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>' +
+      cfCols.map(col => `
+        <div class="form-group full" style="border-left:2px solid var(--accent);padding-left:10px">
+          <label class="form-label" style="color:var(--accent)">${escHtml(col.label)}</label>
+          <input class="form-input" id="edit-cf-${col.key}" placeholder="自定义字段值"
+            value="${escHtml(r.customFields && r.customFields[col.key] || '')}">
+        </div>
+      `).join('');
+  } else {
+    cfContainer.innerHTML = '';
+  }
+
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingIdx = -1;
+}
+
+function autoCalcTotal() {
+  const a = parseFloat(document.getElementById('edit-amount').value) || 0;
+  const t = parseFloat(document.getElementById('edit-tax').value) || 0;
+  if (a > 0 || t > 0) {
+    document.getElementById('edit-total').value = (a + t).toFixed(2);
+  }
+}
+
+function saveEdit() {
+  if (editingIdx < 0) return;
+  const r = results[editingIdx];
+
+  r.invoiceType = document.getElementById('edit-invoiceType').value;
+  r.invoiceNum  = document.getElementById('edit-invoiceNum').value.trim();
+  r.invoiceCode = document.getElementById('edit-invoiceCode').value.trim();
+  r.date        = document.getElementById('edit-date').value.trim();
+  r.buyer       = document.getElementById('edit-buyer').value.trim();
+  r.seller      = document.getElementById('edit-seller').value.trim();
+  r.amount      = document.getElementById('edit-amount').value.trim();
+  r.tax         = document.getElementById('edit-tax').value.trim();
+  r.total       = document.getElementById('edit-total').value.trim();
+  r.isEdited    = true;
+
+  // Save custom column values (key = cf_<id>)
+  if (!r.customFields) r.customFields = {};
+  columns.filter(c => c.type === 'custom').forEach(col => {
+    const el = document.getElementById(`edit-cf-${col.key}`);
+    if (el) r.customFields[col.key] = el.value.trim();
+  });
+
+  recomputeAllDuplicates();
+  closeModal();
+  renderResults();
+  updateStats();
+  log(`已修改第 ${editingIdx+1} 条: ${r.filename}`, 'warn');
+}
+
+document.getElementById('editModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('editModal')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function buildCsvFilename(mode = 'valid') {
+  return buildRenameString() + (mode === 'all' ? '_全部发票.csv' : '_有效发票.csv');
+}
+
+function exportCsvRows(rowsToExport, mode = 'valid') {
+  const exportCols = columns.filter(c => c.visible);
+  const header = ['序号', ...exportCols.map(c => c.label), '已人工修改', '文件名'];
+
+  const getVal = (r, col) => {
+    if (col.key.startsWith('cf_')) return (r.customFields && r.customFields[col.key]) || '';
+    if (['amount', 'tax', 'total'].includes(col.key)) return r[col.key] || '';
+    return r[col.key] || '';
+  };
+
+  const csvEscape = (value) => {
+    const s = String(value == null ? '' : value);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  const rows = [header];
+  rowsToExport.forEach((r, idx) => {
+    rows.push([
+      idx + 1,
+      ...exportCols.map(col => getVal(r, col)),
+      r.isEdited ? '是' : '否',
+      r.filename || '',
+    ]);
+  });
+
+  const csvText = '\ufeff' + rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = buildCsvFilename(mode);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportValidCsv() {
+  if (!results.length) { log('没有可导出的数据', 'warn'); return; }
+  const validResults = results.filter(r => !r.isDuplicate);
+  const excluded = results.length - validResults.length;
+  exportCsvRows(validResults, 'valid');
+  const tip = excluded > 0 ? `（已排除 ${excluded} 条重复发票）` : '';
+  log(`已导出有效发票CSV ${validResults.length} 条${tip}`, 'success');
+}
+
+function exportAllCsv() {
+  if (!results.length) { log('没有可导出的数据', 'warn'); return; }
+  exportCsvRows(results, 'all');
+  log(`已导出全部CSV ${results.length} 条（不去重）`, 'success');
+}
+
+// ── Clear ─────────────────────────────────────────────────
+function clearResults() {
+  if (isProcessing) return;
+  results = []; uploadedFiles = [];
+  renderFileList(); renderResults(); updateStats();
+  log('已清空所有数据', 'info');
+}
+
+// ── Init ──────────────────────────────────────────────────
+renderColList();
+renderTableHeader();
+renderRenameSegments();
+</script>
+</body>
+</html>
