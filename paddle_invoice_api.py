@@ -83,9 +83,11 @@ def get_resource_root() -> Path:
 
 
 def get_safe_runtime_root() -> Path:
-    """Return a writable runtime directory under %PUBLIC%\\Documents\\InvoiceOCRTool."""
-    public_root = Path(os.environ.get("PUBLIC", r"C:\Users\Public"))
-    return public_root / "Documents" / "InvoiceOCRTool"
+    """Return a writable runtime directory."""
+    if sys.platform == "win32":
+        public_root = Path(os.environ.get("PUBLIC", r"C:\Users\Public"))
+        return public_root / "Documents" / "InvoiceOCRTool"
+    return Path.home() / ".local" / "share" / "InvoiceOCRTool"
 
 
 # Module-level singletons derived from the path helpers.
